@@ -7,7 +7,12 @@ const cors = require('cors');
 
 const app = express();
 
-app.use(cors())
+app.use(express.json());
+app.use(cors());
+
+app.get('/', (re,res)=> {
+    return res.json("from backend");
+})
 
 // db connection
 const db = mysql.createConnection({
@@ -16,6 +21,14 @@ const db = mysql.createConnection({
     password: "",
     database: 'mariqueuena'
 })
+
+// app.get ('/users', (req,res)=>{
+//     const sql= "SELECT * FROM users";
+//     db.query(sql, (err,data)=> {
+//         if(err) return res.json(err);
+//         return res.json(data);
+//     })
+// })
 
 app.post('/users', (req, res) =>{
     const sql = "SELECT * FROM users WHERE email = ? AND password = ?";
@@ -29,6 +42,35 @@ app.post('/users', (req, res) =>{
     })
 })
 
-app.listen(8081, ()=>{
+app.post('/registrationPage', (req, res) =>{
+    const sql = "INSERT INTO users (`fname`, `lname`, `email`, `password`) VALUES (?)";
+    const values = [
+        req.body.fName,
+        req.body.lName,
+        req.body.email,
+        req.body.password,
+    ]
+    db.query(sql, [values], (err, data) =>{
+        if(err) return res.json(err);
+        return res.json(data);
+    })
+})
+
+// app.post('/register', (req, res)=> {
+//     const firstName = req.body.firstName;
+//     const lastName = req.body.lastName;
+//     const email = req.body.email;
+//     const password = req.body.password;
+
+//     db.query(
+//         "INSERT INTO users (fname, lname, email, password) VALUES (?,?,?,?)", 
+//         [firstName, lastName, email, password], 
+//         (err, result) => {
+//             console.log(err);
+//         }
+//     );
+// });
+
+app.listen(3031, ()=>{
     console.log("listening");
 })
