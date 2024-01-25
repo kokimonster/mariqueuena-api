@@ -15,7 +15,7 @@ app.get('/', (re, res) => {
 })
 
 // db connection
-const db = mysql.createConnection({
+const db = mysql.createPool({
   host: "localhost",
   user: "root",
   password: "",
@@ -47,6 +47,23 @@ app.post('/login', async (req, res) => {
     }
   });
 });
+
+app.get('/users', async (req, res) => {
+  const sql = "SELECT * FROM users WHERE LOWER(fname) = '%admin%'";
+  
+  db.query(sql, (err, data) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+    // Assuming the user information is returned as an array with the first user being the logged-in user
+    console.log('Data from the database:', data);
+    const user = data.length > 0 ? data[0] : null;
+    return res.json(user);
+  });
+});
+
+
 
 app.post('/registrationPage', async (req, res) => {
   try {
@@ -85,7 +102,6 @@ app.post('/registrationPage', async (req, res) => {
   }
 });
 
-
-app.listen(3031, () => {
-  console.log("listening");
-})
+const server = app.listen(3031, () => {
+  console.log('Server is running on port 3031');
+});
