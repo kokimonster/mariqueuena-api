@@ -6,9 +6,28 @@ const mysql = require('mysql');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const app = express();
+const multer = require('multer');
+const path = require('path');
 
 app.use(express.json());
 app.use(cors());
+
+const storage = multer.diskStorage({
+  destination: (req, file, db) => {
+    db(null, 'public/images')
+  },
+  filename: (req, file, db) => {
+    // Access values.idType from the request body
+    const idType = req.body.idType;
+    // Generate the filename using idType and current timestamp
+    const filename = idType + "_" + Date.now() + path.extname(file.originalname);
+
+    db(null, filename);
+  }
+})
+
+const upload = multer({ storage: storage }); // Configure Multer with the storage option
+
 
 app.get('/', (re, res) => {
   return res.json("from backend");
@@ -63,12 +82,31 @@ app.get('/users', async (req, res) => {
   });
 });
 
+app.post('/upload', upload.single('idImage'), (req, res) => {
+  console.log("upload ", req.file);
+  const generatedFilename = req.file.filename;
 
+  // Get the email of the user based on the provided user_id
+  const userEmail = req.body.email;
+
+  // Insert into id_table with user_email
+  const query = "INSERT INTO id_table (user_email, idType, idNumber, filename, filepath) VALUES (?, ?, ?, ?, ?)";
+  const uploadValues = [userEmail, req.body.idType, req.body.idNumber, generatedFilename, req.file.path];
+
+  db.query(query, uploadValues, (uploadErr, uploadData) => {
+    if (uploadErr) {
+      console.error(uploadErr);
+      return res.json(uploadErr);
+    }
+
+    return res.json(uploadData);
+  });
+});
 
 app.post('/registrationPage', async (req, res) => {
   try {
     // Check if the email already exists in the database
-    const checkEmailQuery = "SELECT * FROM users WHERE `email` = ?";
+    const checkEmailQuery = "SELECT * FROM users_table WHERE `email` = ?";
     const checkEmailValues = [req.body.email];
 
     db.query(checkEmailQuery, checkEmailValues, async (checkEmailErr, checkEmailData) => {
@@ -84,10 +122,11 @@ app.post('/registrationPage', async (req, res) => {
 
       // If the email is not registered, proceed with registration
       const hashedPassword = await bcrypt.hash(req.body.password, 10);
-      const registrationQuery = "INSERT INTO users (`fname`, `lname`, `email`, `password`) VALUES (?, ?, ?, ?)";
-      const registrationValues = [req.body.fName, req.body.lName, req.body.email, hashedPassword];
+      const query = 'INSERT INTO users_table (fname, minitial, lname, dateofbirth, mnumber, email, password) VALUES (?, ?, ?, ?, ?, ?, ?)';
+      const registrationValues = [req.body.fName,req.body.mInitial, req.body.lName, req.body.dateOfBirth, req.body.mNumber, req.body.email, hashedPassword];
+      console.log(registrationValues);
 
-      db.query(registrationQuery, registrationValues, (registrationErr, registrationData) => {
+      db.query(query, registrationValues, (registrationErr, registrationData) => {
         if (registrationErr) {
           console.error(registrationErr);
           return res.json(registrationErr);
@@ -104,4 +143,4 @@ app.post('/registrationPage', async (req, res) => {
 
 const server = app.listen(3031, () => {
   console.log('Server is running on port 3031');
-});
+}); 
