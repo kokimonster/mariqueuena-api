@@ -42,7 +42,7 @@ const db = mysql.createPool({
 })
 
 app.post('/login', async (req, res) => {
-  const sql = "SELECT * FROM users WHERE `email` = ?";
+  const sql = "SELECT * FROM users_table WHERE `email` = ?";
   const values = [req.body.email];
 
   db.query(sql, values, async (err, data) => {
@@ -68,7 +68,7 @@ app.post('/login', async (req, res) => {
 });
 
 app.get('/users', async (req, res) => {
-  const sql = "SELECT * FROM users WHERE LOWER(fname) = '%admin%'";
+  const sql = "SELECT * FROM users_table WHERE LOWER(fname) = '%admin%'";
   
   db.query(sql, (err, data) => {
     if (err) {
