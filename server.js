@@ -8,13 +8,12 @@ const bcrypt = require('bcrypt');
 const app = express();
 const multer = require('multer');
 const path = require('path');
+const nodemailer = require('nodemailer');
 
 const jwt = require("jsonwebtoken");
 
 app.use(express.json());
 app.use(cors());
-app.set("view engine","ejs");
-app.use(express.urlencoded({ extended: false}));
 
 const generateJWTSecret = () => {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_';
@@ -29,6 +28,50 @@ const generateJWTSecret = () => {
   return jwtSecret;
 };
 
+const JWT_SECRET = "hvdvay6ert72839289()aiyg8t87qt72393293883uhefiuh78ttq3ifi78272jbkj?[]]pou89ywe";
+;
+
+function generateResetToken(email, code) {
+  const secret = JWT_SECRET;
+  const token = jwt.sign({ user: email, code }, secret, { expiresIn: '1h' }); // Token expires in 1 hour
+  return token;
+}
+
+// Function to decode and verify JWT token
+function verifyResetToken(token) {
+  const secret = JWT_SECRET;
+  try {
+    const decoded = jwt.verify(token, secret);
+    return decoded; // Returns decoded object { email, code }
+  } catch (error) {
+    return null; // Token verification failed
+  }
+}
+
+function compareStrings(str1, str2) {
+  // If the lengths are not equal, the strings cannot be equal
+  if (str1.length !== str2.length) {
+    return false;
+  }
+
+  let result = 0;
+
+  // Iterate over each character and perform bitwise OR operation
+  for (let i = 0; i < str1.length; i++) {
+    result |= str1.charCodeAt(i) ^ str2.charCodeAt(i);
+  }
+
+  // If the strings are equal, result will be 0
+  return result === 0;
+}
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'mariqueuena@gmail.com',
+    pass: 'yiykbbiftvqxwfjy'
+  }
+});
 
 const storage = multer.diskStorage({
   destination: (req, file, db) => {
@@ -162,6 +205,7 @@ app.post('/registrationPage', async (req, res) => {
 
 app.post("/forgot-password", async (req, res) => {
   const sql = "SELECT * FROM users_table WHERE `email` = ?";
+  const randomCode = Math.floor(100000 + Math.random() * 900000);
   const email = req.body.email;
 
   try {
@@ -172,18 +216,33 @@ app.post("/forgot-password", async (req, res) => {
         const user = data.length > 0 ? data[0] : null;
         if (!user) {
           return res.json("Email doesn't exist");
+        } else {
+        
+          // Generate JWT token for password reset
+          const token = jwt.sign({ user: email, randomCode }, JWT_SECRET, { expiresIn: '1h' });
+          console.log("Forgot: " + token);
+
+          // Send email with the reset password code and token
+          const mailOptions = {
+            from: 'mariqueuena@gmail.com',
+            to: req.body.email,
+            subject: 'Password Reset Code',
+            text: `Your password reset code is: ${randomCode}`,
+            html: `<p>Your password reset code is: <strong>${randomCode}</strong></p>`
+          };
+          transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+              console.error('Error sending email:', error);
+              return res.json("Error sending email");
+            } else {
+              console.log('Email sent:', info.response);
+              return res.json("Success");
+            }
+          });
+
+          return res.json({ message: "Success", token }); // Return the JWT token to the client
         }
 
-        // Generate token and send email
-        const secret = generateJWTSecret + user.password;
-        const token = jwt.sign({ email: user.email, id: user._id }, secret, {
-          expiresIn: '5m',
-        });
-        const link = `http://localhost:3031/reset-password/${user.id}/${token}`;
-        console.log(link);
-        // Send email with the reset password link
-
-        return res.json("Success");
       }
     });
   } catch (error) {
@@ -192,64 +251,54 @@ app.post("/forgot-password", async (req, res) => {
   }
 });
 
-app.get('/reset-password/:id/:token', async (req, res) => {
-  const { id, token } = req.params;
-  const sql = "SELECT * FROM users_table WHERE `id` = ?";
-  
-  db.query(sql, id, async (err, data) => {
-    if (err) {
-      return res.render("index", { status: "Error occurred while querying the database" });
-    } else {
-      const user = data.length > 0 ? data[0] : null;
-      if (!user) {
-        return res.render("index", { status: "User with the provided ID doesn't exist" });
-      } else {
-        const secret = generateJWTSecret + user.password;
-        try {
-          const verify = jwt.verify(token, secret);
-          res.render("index", { email: verify.email, status: "Not Verified" });
-        } catch (error) {
-          return res.render("index", { status: "Token verification failed" });
-        }
-      }
-    }
-  });
+app.post('/verify-code', (req, res) => {
+
+  const { token, code} = req.body;
+
+  console.log("Token: " + token);
+  // Verify the token and extract the code from it
+  const decodedToken = verifyResetToken(token);
+  console.log("Decoded Token: " + decodedToken);
+
+  if (!decodedToken) {
+    return res.json({ error: "Invalid or expired token" });
+  }
+
+  // Extract code from decoded token
+  const tokenCode = decodedToken.randomCode;
+  const email = decodedToken.user;
+  console.log("Token Code: " + tokenCode);
+  console.log("Entered Code: " + code);
+
+  if (code == tokenCode) {
+    return res.json({ message: "Success", email });
+  } else {
+    return res.json({ error: "Invalid code" });
+  }
+
 });
 
-app.post('/reset-password/:id/:token', async (req, res) => {
-  const { id, token } = req.params;
-  const { password } = req.body;
-  
-  const sql = "SELECT * FROM users_table WHERE `id` = ?";
-  db.query(sql, id, async (err, data) => {
-    if (err) {
-      return res.render("index", { status: "Error occurred while querying the database" });
-    } else {
-      const user = data.length > 0 ? data[0] : null;
-      if (!user) {
-        return res.render("index", { status: "User with the provided ID doesn't exist" });
-      } else {
-        const secret = generateJWTSecret + user.password;
-        try {
-          const verify = jwt.verify(token, secret);
-          const encryptedPassword = await bcrypt.hash(password, 10);
-          const sql = "UPDATE users_table SET `password` = ? WHERE `id` = ?";
-          db.query(sql, [encryptedPassword, id], async (err, data) => {
-            if (err) {
-              return res.render("index", { status: "Error occurred while updating the password" });
-            }
-            
-            res.redirect("http://localhost:3000/");
-          });
-        } catch (error) {
-          console.log(error);
-          res.render("index", { status: "Something Went Wrong" });
-        }
-      }
-    }
-  });
-});
+app.post('/reset-password', async (req, res) => {
 
+  try {
+    const hashedPassword = await bcrypt.hash(req.body.password, 10);
+    const sql = "UPDATE users_table SET `password` = ? WHERE `email` = ?";
+    db.query(sql, [hashedPassword, req.body.email], async (err, data) => {
+      if (err) {
+        console.log("Password: " + req.body.password);
+        console.log("Email: " + req.body.email);
+        return res.status(500).json({ error: "Error occurred while updating the password" });
+      }
+      
+      return res.json({ message: "Password reset successful" });
+    });
+  } catch (error) {
+    console.error(error);
+    console.log("Password: " + req.body.password);
+    console.log("Email: " + req.body.email);
+    return res.status(500).json({ error: "An error occurred while processing your request" });
+  }
+});
 
 const server = app.listen(3031, () => {
   console.log('Server is running on port 3031');
