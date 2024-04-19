@@ -9,8 +9,26 @@ const app = express();
 const multer = require('multer');
 const path = require('path');
 
+const jwt = require("jsonwebtoken");
+
 app.use(express.json());
 app.use(cors());
+app.set("view engine","ejs");
+app.use(express.urlencoded({ extended: false}));
+
+const generateJWTSecret = () => {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_';
+  const length = 64;
+  let jwtSecret = '';
+  
+  for (let i = 0; i < length; i++) {
+      const randomIndex = Math.floor(Math.random() * characters.length);
+      jwtSecret += characters[randomIndex];
+  }
+  
+  return jwtSecret;
+};
+
 
 const storage = multer.diskStorage({
   destination: (req, file, db) => {
@@ -64,6 +82,7 @@ app.post('/login', async (req, res) => {
     } else {
       return res.json("Failed");
     }
+
   });
 });
 
@@ -140,6 +159,97 @@ app.post('/registrationPage', async (req, res) => {
     return res.json(error);
   }
 });
+
+app.post("/forgot-password", async (req, res) => {
+  const sql = "SELECT * FROM users_table WHERE `email` = ?";
+  const email = req.body.email;
+
+  try {
+    db.query(sql, email, async (err, data) => {
+      if (err) {
+        return res.json("Error occurred while querying the database");
+      } else {
+        const user = data.length > 0 ? data[0] : null;
+        if (!user) {
+          return res.json("Email doesn't exist");
+        }
+
+        // Generate token and send email
+        const secret = generateJWTSecret + user.password;
+        const token = jwt.sign({ email: user.email, id: user._id }, secret, {
+          expiresIn: '5m',
+        });
+        const link = `http://localhost:3031/reset-password/${user.id}/${token}`;
+        console.log(link);
+        // Send email with the reset password link
+
+        return res.json("Success");
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.json("An error occurred while processing your request");
+  }
+});
+
+app.get('/reset-password/:id/:token', async (req, res) => {
+  const { id, token } = req.params;
+  const sql = "SELECT * FROM users_table WHERE `id` = ?";
+  
+  db.query(sql, id, async (err, data) => {
+    if (err) {
+      return res.render("index", { status: "Error occurred while querying the database" });
+    } else {
+      const user = data.length > 0 ? data[0] : null;
+      if (!user) {
+        return res.render("index", { status: "User with the provided ID doesn't exist" });
+      } else {
+        const secret = generateJWTSecret + user.password;
+        try {
+          const verify = jwt.verify(token, secret);
+          res.render("index", { email: verify.email, status: "Not Verified" });
+        } catch (error) {
+          return res.render("index", { status: "Token verification failed" });
+        }
+      }
+    }
+  });
+});
+
+app.post('/reset-password/:id/:token', async (req, res) => {
+  const { id, token } = req.params;
+  const { password } = req.body;
+  
+  const sql = "SELECT * FROM users_table WHERE `id` = ?";
+  db.query(sql, id, async (err, data) => {
+    if (err) {
+      return res.render("index", { status: "Error occurred while querying the database" });
+    } else {
+      const user = data.length > 0 ? data[0] : null;
+      if (!user) {
+        return res.render("index", { status: "User with the provided ID doesn't exist" });
+      } else {
+        const secret = generateJWTSecret + user.password;
+        try {
+          const verify = jwt.verify(token, secret);
+          const encryptedPassword = await bcrypt.hash(password, 10);
+          const sql = "UPDATE users_table SET `password` = ? WHERE `id` = ?";
+          db.query(sql, [encryptedPassword, id], async (err, data) => {
+            if (err) {
+              return res.render("index", { status: "Error occurred while updating the password" });
+            }
+            
+            res.redirect("http://localhost:3000/");
+          });
+        } catch (error) {
+          console.log(error);
+          res.render("index", { status: "Something Went Wrong" });
+        }
+      }
+    }
+  });
+});
+
 
 const server = app.listen(3031, () => {
   console.log('Server is running on port 3031');
