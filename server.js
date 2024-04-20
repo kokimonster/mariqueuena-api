@@ -128,6 +128,27 @@ app.post('/users', async (req, res) => {
   });
 });
 
+app.post('/verify-user', async (req, res) => {
+  const sql = "SELECT * FROM users_table WHERE isVerified = 0";
+
+  db.query(sql, (err, data) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+
+    // Format the dateofbirth field in each user object
+    data.forEach(user => {
+      const birthDate = new Date(user.dateofbirth);
+      const formattedDate = `${birthDate.getFullYear()}-${('0' + (birthDate.getDate())).slice(-2)}-${('0' + (birthDate.getMonth() + 1)).slice(-2)}`;
+      user.dateofbirth = formattedDate;
+    });
+
+    // Send the formatted data as response
+    res.json(data);
+  });
+});
+
 app.post('/upload', upload.single('idImage'), (req, res) => {
   console.log("upload ", req.file);
   const generatedFilename = req.file.filename;
