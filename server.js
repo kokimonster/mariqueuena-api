@@ -128,6 +128,32 @@ app.post('/users', async (req, res) => {
   });
 });
 
+app.get('/users', async (req, res) => {
+  const inQueue = req.query.inQueue === '1' ? 1 : 0;
+  const sql = "SELECT * FROM users_table WHERE inQueue = ?";
+  
+  db.query(sql, [inQueue], (err, data) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+    console.log('Data from the database:', data);
+    res.json(data); // Send the users who match the inQueue status in the response
+  });
+});
+
+app.get('/removeQueue', async (req, res) => {
+  // First, update the users with inQueue = 1 to set it to 0
+  const updateSql = "UPDATE users_table SET inQueue = 0 WHERE inQueue = 1";
+  
+  db.query(updateSql, (updateErr, updateResult) => {
+    if (updateErr) {
+      console.error(updateErr);
+      return res.status(500).json({ error: 'Failed to update inQueue status' });
+    }
+  })
+});
+
 app.post('/verify-user', async (req, res) => {
   const sql = "SELECT * FROM users_table WHERE isVerified = 0";
 
@@ -146,6 +172,42 @@ app.post('/verify-user', async (req, res) => {
 
     // Send the formatted data as response
     res.json(data);
+  });
+});
+
+app.post('/addQueue', async (req,res) => {
+  const selectSql = "SELECT * FROM users_table WHERE email = ?";
+  const updateSql = "UPDATE users_table SET inQueue = 1 WHERE email = ?";
+  const email = req.body.email;
+
+  console.log("Email: " + email);
+
+  db.query(selectSql, [email], (err, data) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+    // Check if user with provided email exists
+    if (data.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = data[0];
+
+    // if (user.inQueue == 1) {
+    //   // User is already in the queue
+    //   return res.json({ message: "Already in Queue" });
+    // }
+
+    // Update the user's inQueue status to 1
+    db.query(updateSql, [email], (err, result) => {
+      if (err) {
+        console.error(err);
+        return res.json({ error: 'Internal Server Error' });
+      }
+
+      res.json({ message: "Success" });
+    });
   });
 });
 
