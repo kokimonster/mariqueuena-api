@@ -48,23 +48,6 @@ function verifyResetToken(token) {
   }
 }
 
-function compareStrings(str1, str2) {
-  // If the lengths are not equal, the strings cannot be equal
-  if (str1.length !== str2.length) {
-    return false;
-  }
-
-  let result = 0;
-
-  // Iterate over each character and perform bitwise OR operation
-  for (let i = 0; i < str1.length; i++) {
-    result |= str1.charCodeAt(i) ^ str2.charCodeAt(i);
-  }
-
-  // If the strings are equal, result will be 0
-  return result === 0;
-}
-
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -129,18 +112,19 @@ app.post('/login', async (req, res) => {
   });
 });
 
-app.get('/users', async (req, res) => {
-  const sql = "SELECT * FROM users_table WHERE LOWER(fname) = '%admin%'";
+app.post('/users', async (req, res) => {
+  const email = req.body.email;
+  const sql = "SELECT * FROM users_table WHERE email = ? AND role = 'admin'";
   
-  db.query(sql, (err, data) => {
+  db.query(sql, [email], (err, data) => {
     if (err) {
       console.error(err);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
     // Assuming the user information is returned as an array with the first user being the logged-in user
     console.log('Data from the database:', data);
-    const user = data.length > 0 ? data[0] : null;
-    return res.json(user);
+    const isAdmin = data.length > 0; // Check if any users with the admin role were found
+    return res.json({ isAdmin: isAdmin }); // Send the isAdmin status in the response
   });
 });
 
