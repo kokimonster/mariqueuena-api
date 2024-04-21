@@ -112,6 +112,7 @@ app.post('/login', async (req, res) => {
   });
 });
 
+//Detects a user if they have the admin role
 app.post('/users', async (req, res) => {
   const email = req.body.email;
   const sql = "SELECT * FROM users_table WHERE email = ? AND role = 'admin'";
@@ -128,7 +129,8 @@ app.post('/users', async (req, res) => {
   });
 });
 
-app.get('/users', async (req, res) => {
+//Get users who is in queue
+app.get('/getInQueue', async (req, res) => {
   const inQueue = req.query.inQueue === '1' ? 1 : 0;
   const sql = "SELECT * FROM users_table WHERE inQueue = ?";
   
@@ -137,12 +139,12 @@ app.get('/users', async (req, res) => {
       console.error(err);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
-    console.log('Data from the database:', data);
     res.json(data); // Send the users who match the inQueue status in the response
   });
+  
 });
 
-app.get('/removeQueue', async (req, res) => {
+app.post('/removeQueue', async (req, res) => {
   // First, update the users with inQueue = 1 to set it to 0
   const updateSql = "UPDATE users_table SET inQueue = 0 WHERE inQueue = 1";
   
@@ -151,9 +153,21 @@ app.get('/removeQueue', async (req, res) => {
       console.error(updateErr);
       return res.status(500).json({ error: 'Failed to update inQueue status' });
     }
+
+    if (updateResult.affectedRows === 0) {
+      // No users were in the queue to remove
+      return res.json({ error: "No users in the queue to remove" });
+    }
+
+    // Users in the queue have been successfully removed
+    res.json({ message: 'Users removed from the queue' });
+
   })
 });
 
+
+
+//Detects if the user is unverified and returns the user.
 app.post('/verify-user', async (req, res) => {
   const sql = "SELECT * FROM users_table WHERE isVerified = 0";
 
@@ -175,12 +189,17 @@ app.post('/verify-user', async (req, res) => {
   });
 });
 
+//Put the user in queue and assigns a queue number
 app.post('/addQueue', async (req,res) => {
   const selectSql = "SELECT * FROM users_table WHERE email = ?";
-  const updateSql = "UPDATE users_table SET inQueue = 1 WHERE email = ?";
+  const updateInQueueSql = "UPDATE users_table SET inQueue = 1 WHERE email = ?";
+  const updateQueueNumberSql = "UPDATE users_table SET queueNumber = ? WHERE email = ?";
   const email = req.body.email;
+  const number = req.body.number;
+
 
   console.log("Email: " + email);
+  console.log("Number: " + number);
 
   db.query(selectSql, [email], (err, data) => {
     if (err) {
@@ -194,23 +213,42 @@ app.post('/addQueue', async (req,res) => {
 
     const user = data[0];
 
-    // if (user.inQueue == 1) {
-    //   // User is already in the queue
-    //   return res.json({ message: "Already in Queue" });
-    // }
+    if (user && user.inQueue === 1) {
+      return res.json({ message: "Already in Queue" });
+    }
+
 
     // Update the user's inQueue status to 1
-    db.query(updateSql, [email], (err, result) => {
+    db.query(updateInQueueSql, [email], (err, result) => {
       if (err) {
         console.error(err);
-        return res.json({ error: 'Internal Server Error' });
+        return res.json({ error: 'Failed to assign In Queue status' });
       }
+    });
 
-      res.json({ message: "Success" });
+    //** Update the user's queueNumber to the provided number
+    db.query(updateQueueNumberSql, [number, email], (err, result) => {
+      if (err) {
+        console.error(err);
+        return res.json({ error: 'Failed to assign Queue Number' });
+      }
+      // Fetch the updated user data
+      const selectUpdatedUserSql = "SELECT * FROM users_table WHERE email = ?";
+      db.query(selectUpdatedUserSql, [email], (err, updatedUserData) => {
+        if (err) {
+          console.error(err);
+          return res.json({ error: 'Failed to fetch updated user data' });
+        }
+        const queueNumber = result.queueNumber;
+
+        // Send the final updated data in the response
+        res.json({ message: "Success", number: queueNumber });
+      });
     });
   });
 });
 
+//Upload ID Information
 app.post('/upload', upload.single('idImage'), (req, res) => {
   console.log("upload ", req.file);
   const generatedFilename = req.file.filename;
@@ -258,6 +296,7 @@ app.post('/get-id', (req, res) => {
 });
 
 
+//Register the user's information
 app.post('/registrationPage', async (req, res) => {
   try {
     // Check if the email already exists in the database
