@@ -232,6 +232,32 @@ app.post('/upload', upload.single('idImage'), (req, res) => {
   });
 });
 
+app.post('/get-id', (req, res) => {
+  const userEmail = req.body.email;
+
+  // Query to fetch the ID information for the user
+  const query = "SELECT * FROM id_table WHERE user_email = ?";
+
+  db.query(query, [userEmail], (err, data) => {
+    if (err) {
+      console.error("Error fetching ID:", err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+
+    if (data.length === 0) {
+      return res.status(404).json({ error: 'ID not found for the user' });
+    }
+
+    // Assuming there is only one ID per user, you can directly send the first ID data
+    const idData = data[0];
+    const idDownloadLink = idData.filepath; // Adjust this based on your file storage logic
+
+    // Send the ID download link in the response
+    return res.json({ downloadLink: idDownloadLink });
+  });
+});
+
+
 app.post('/registrationPage', async (req, res) => {
   try {
     // Check if the email already exists in the database
